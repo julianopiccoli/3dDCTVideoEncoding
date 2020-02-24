@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.List;
 import java.util.zip.Deflater;
 
 public class Encoder {
@@ -59,6 +60,10 @@ public class Encoder {
 		
 		System.out.println("DCT complete. Applying quantization.");
 		
+		pixels = null;
+		double[] quantizationOutput = new double[buffer.length];
+		int quantizationOutputIndex = 0;
+		
 		// Quantization of the DCT output. This process divides each sample
 		// of the DCT cube by five times the sum of its coordinates in the cube.
 		// This turns most of the higher frequencies to zero.
@@ -69,7 +74,8 @@ public class Encoder {
 						for (int i = 0; i < blockSize; i++) {
 							for (int j = 0; j < blockSize; j++) {
 								int dctCoeffCubePosition = (z + k) * frameSize + (y + i) * width + x + j;
-								dctCoeff[dctCoeffCubePosition] = Math.round(dctCoeff[dctCoeffCubePosition] / Math.max(1, 5 * (i + j + k)));
+								quantizationOutput[quantizationOutputIndex] = Math.round(dctCoeff[dctCoeffCubePosition] / Math.max(1, 5 * (i + j + k)));
+								quantizationOutputIndex++;
 							}
 						}
 					}
@@ -82,12 +88,20 @@ public class Encoder {
 		buffer = null;
 		buffer = new byte[width * height * depth];
 		
+		// The DCT Coefficients inside the cubes are listed in diagonal slices to maximize the lengths
+		// of the zeroes sequences. This increases the efficiency of the deflate compressor.
+		List<int[]> positions = CubeUtils.diagonalSlices(blockSize, blockSize, blockSize);
+		
 		// Applying Exp-Golomb coding to the quantized data.
 		ExpGolombWriter writer = new ExpGolombWriter();
 		writer.setOutput(buffer);
-		for (int index = 0; index < dctCoeff.length; index++) {
-			int dctCoeffInt = (int) dctCoeff[index];
-			writer.writeValue(dctCoeffInt);
+		int blockLength = blockSize * blockSize * blockSize;
+		for (int offset = 0; offset < quantizationOutput.length; offset += blockLength) {
+			for (int index = 0; index < positions.size(); index++) {
+				int[] position = positions.get(index);
+				int dctCoeffInt = (int) quantizationOutput[offset + position[0] + (position[1] * blockSize) + (position[2] * blockSize * blockSize)];
+				writer.writeValue(dctCoeffInt);
+			}
 		}
 		
 		// Deflating the Exp-Golomb coded data.

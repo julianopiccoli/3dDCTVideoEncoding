@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.List;
 import java.util.zip.DataFormatException;
 import java.util.zip.Inflater;
 
@@ -57,13 +58,20 @@ public class Decoder {
 		System.out.println("Decoding the Exp-Golomb encoded data");
 		ExpGolombReader expGolombReader = new ExpGolombReader();
 		expGolombReader.setInput(inflatedDataBuffer);
-		double[] dctCoeffMatrix = new double[width * height * depth];
-		int dctCoeffMatrixPosition = 0;
-		while(dctCoeffMatrixPosition < dctCoeffMatrix.length) {
-			dctCoeffMatrix[dctCoeffMatrixPosition] = expGolombReader.readValue();
-			dctCoeffMatrixPosition++;
+		
+		List<int[]> positions = CubeUtils.diagonalSlices(blockSize, blockSize, blockSize);
+		
+		double[] quantizationInput = new double[width * height * depth];
+		int blockLength = blockSize * blockSize * blockSize;
+		for (int offset = 0; offset < quantizationInput.length; offset += blockLength) {
+			for (int index = 0; index < positions.size(); index++) {
+				int[] position = positions.get(index);
+				quantizationInput[offset + position[0] + (position[1] * blockSize) + (position[2] * blockSize * blockSize)] = expGolombReader.readValue();
+			}
 		}
 
+		double[] dctCoeffMatrix = new double[width * height * depth];
+		int quantizationInputPosition = 0;
 		// Dequantize the DCT cubes
 		System.out.println("Dequantizing cubes");
 		for (int z = 0; z < depth; z += blockSize) {
@@ -73,7 +81,8 @@ public class Decoder {
 						for (int i = 0; i < blockSize; i++) {
 							for (int j = 0; j < blockSize; j++) {
 								int dctCoeffCubePosition = (z + k) * frameSize + (y + i) * width + x + j;
-								dctCoeffMatrix[dctCoeffCubePosition] = Math.round(dctCoeffMatrix[dctCoeffCubePosition] * Math.max(1, 5 * (i + j + k)));
+								dctCoeffMatrix[dctCoeffCubePosition] = Math.round(quantizationInput[quantizationInputPosition] * Math.max(1, 5 * (i + j + k)));
+								quantizationInputPosition++;
 							}
 						}
 					}
