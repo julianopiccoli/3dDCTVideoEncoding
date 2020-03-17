@@ -224,7 +224,7 @@ int decode(char * inputFileName, char * outputFileName, int width, int height, i
 
 			clResult = clEnqueueReadBuffer(queue, kernelOutputData, CL_TRUE, 0, bufferSize * sizeof(float), outputData, 0, NULL, NULL);
 			writeCubes(outputFile, outputData, width, height);
-			framesRead += 8;
+			framesRead += DCT_BLOCK_SIZE;
 		}
 
 		fflush(outputFile);
