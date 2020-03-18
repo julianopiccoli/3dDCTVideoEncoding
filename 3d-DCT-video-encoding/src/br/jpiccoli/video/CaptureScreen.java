@@ -29,7 +29,7 @@ public class CaptureScreen {
 		Rectangle rectangle = new Rectangle(0, 0, displayMode.getWidth(), displayMode.getHeight());
 		Robot robot = new Robot();
 
-		FileOutputStream stream = new FileOutputStream(args[3]);
+		FileOutputStream stream = new FileOutputStream(args[0]);
 		int width = displayMode.getWidth() / horizontalScaleFactor;
 		int height = displayMode.getHeight() / verticalScaleFactor;
 		int imageWidth = width;
