@@ -13,18 +13,18 @@ void writeCubes(FILE * outputFile, float * data, int width, int height) {
 	size_t totalWritten;
 	size_t writeResult;
 	int frameSize = width * height;
-	int size = width * height * DCT_BLOCK_SIZE;
+	int size = width * height * DCT_BLOCK_DEPTH;
 	int y, x, i, j, k;
 	int pixelPosition;
 	int inputPixelPosition = 0;
 
 	tempBuffer = (unsigned char *) malloc(size);
 
-	for (y = 0; y < height; y += DCT_BLOCK_SIZE) {
-		for (x = 0; x < width; x += DCT_BLOCK_SIZE) {
-			for (k = 0; k < DCT_BLOCK_SIZE; k++) {
-				for (i = 0; i < DCT_BLOCK_SIZE; i++) {
-					for (j = 0; j < DCT_BLOCK_SIZE; j++) {
+	for (y = 0; y < height; y += DCT_BLOCK_HEIGHT) {
+		for (x = 0; x < width; x += DCT_BLOCK_WIDTH) {
+			for (k = 0; k < DCT_BLOCK_DEPTH; k++) {
+				for (i = 0; i < DCT_BLOCK_HEIGHT; i++) {
+					for (j = 0; j < DCT_BLOCK_WIDTH; j++) {
 						pixelPosition = k * frameSize + (y + i) * width + x + j;
 						tempBuffer[pixelPosition] = (unsigned char) data[inputPixelPosition];
 						inputPixelPosition++;
@@ -46,13 +46,11 @@ void writeCubes(FILE * outputFile, float * data, int width, int height) {
 }
 
 void applyDequantization(float * dctCoeff, size_t bufferSize) {
-	int frameSize = DCT_BLOCK_SIZE * DCT_BLOCK_SIZE;
-	int cubeSize = DCT_BLOCK_SIZE * DCT_BLOCK_SIZE * DCT_BLOCK_SIZE;
-	for (int offset = 0; offset < bufferSize; offset += cubeSize) {
-		for (int z = 0; z < DCT_BLOCK_SIZE; z++) {
-			for (int y = 0; y < DCT_BLOCK_SIZE; y++) {
-				for (int x = 0; x < DCT_BLOCK_SIZE; x++) {
-					int dctCoeffCubePosition = offset + (z * frameSize) + (y * DCT_BLOCK_SIZE) + x;
+	for (int offset = 0; offset < bufferSize; offset += CUBE_SIZE) {
+		for (int z = 0; z < DCT_BLOCK_DEPTH; z++) {
+			for (int y = 0; y < DCT_BLOCK_HEIGHT; y++) {
+				for (int x = 0; x < DCT_BLOCK_WIDTH; x++) {
+					int dctCoeffCubePosition = offset + (z * FACE_SIZE) + (y * DCT_BLOCK_WIDTH) + x;
 					dctCoeff[dctCoeffCubePosition] = round(dctCoeff[dctCoeffCubePosition] * fmax(1, 5 * (x + y + z)));
 				}
 			}
@@ -62,13 +60,11 @@ void applyDequantization(float * dctCoeff, size_t bufferSize) {
 
 void reorderDctCoeffs(float * dctCoeff, size_t bufferSize, float * expGolombDecodedData, struct SlicesPositions * slicesPositions) {
 
-	int frameSize = DCT_BLOCK_SIZE * DCT_BLOCK_SIZE;
-	int cubeSize = DCT_BLOCK_SIZE * DCT_BLOCK_SIZE * DCT_BLOCK_SIZE;
 	int expGolombCodedDataPosition = 0;
-	for (int offset = 0; offset < bufferSize; offset += cubeSize) {
+	for (int offset = 0; offset < bufferSize; offset += CUBE_SIZE) {
 		for (int index = 0; index < slicesPositions->length; index++) {
 			struct ThreeDimensionalCoordinates coordinates = slicesPositions->positions[index];
-			dctCoeff[offset + coordinates.x + (coordinates.y * DCT_BLOCK_SIZE) + (coordinates.z * frameSize)] = expGolombDecodedData[expGolombCodedDataPosition];
+			dctCoeff[offset + coordinates.x + (coordinates.y * DCT_BLOCK_WIDTH) + (coordinates.z * FACE_SIZE)] = expGolombDecodedData[expGolombCodedDataPosition];
 			expGolombCodedDataPosition++;
 		}
 	}
@@ -122,8 +118,8 @@ int decode(char * inputFileName, char * outputFileName, int width, int height, i
 	int readResult;
 	int eof;
 
-	bufferSize = width * height * DCT_BLOCK_SIZE;
-	localSize = DCT_BLOCK_SIZE * DCT_BLOCK_SIZE * DCT_BLOCK_SIZE;
+	bufferSize = width * height * DCT_BLOCK_DEPTH;
+	localSize = CUBE_SIZE;
 	inputFile = fopen(inputFileName, "rb");
 	outputFile = fopen(outputFileName, "wb");
 	inputData = (float *) malloc(bufferSize * sizeof(float));
@@ -143,14 +139,20 @@ int decode(char * inputFileName, char * outputFileName, int width, int height, i
 
 	// The DCT Coefficients inside the cubes are listed in diagonal slices to maximize the lengths
 	// of the zeroes sequences. This increases the efficiency of the deflate compressor.
-	slicesPositions = cubeUtils_diagonalSlices(DCT_BLOCK_SIZE, DCT_BLOCK_SIZE, DCT_BLOCK_SIZE);
+	slicesPositions = cubeUtils_diagonalSlices(DCT_BLOCK_WIDTH, DCT_BLOCK_HEIGHT, DCT_BLOCK_DEPTH);
 
 	expGolombStream = expGolomb_createStream(expGolombCodedData);
 
+	printf("Getting device id\n");
 	device = getDeviceId();
+	printf("Creating OpenCL context\n");
 	context = clCreateContext(NULL, 1, &device, NULL, NULL, &clResult);
 	if (clResult == CL_SUCCESS) {
+
+		printf("Building the kernel\n");
+		// Loading the kernel and creating the needed structures.
 		program = buildKernel(context, device, "3dDCT.cl");
+		printf("Creating buffers\n");
 		kernelInputData = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, bufferSize * sizeof(float), inputData, &clResult);
 		if (clResult != CL_SUCCESS) {
 			printf("Error creating OpenCL input data buffer: %d", clResult);
@@ -161,20 +163,27 @@ int decode(char * inputFileName, char * outputFileName, int width, int height, i
 			printf("Error creating OpenCL output data buffer: %d", clResult);
 			return 1;
 		}
+		printf("Creating command queue\n");
 		queue = clCreateCommandQueue(context, device, NULL, &clResult);
 		if (clResult != CL_SUCCESS) {
 			printf("Error creating OpenCL command queue: %d", clResult);
 			return 1;
 		}
+		printf("Creating kernel\n");
 		kernel = clCreateKernel(program, "idct", &clResult);
 		if (clResult != CL_SUCCESS) {
 			printf("Error creating OpenCL kernel: %d", clResult);
 			return 1;
 		}
 
+		// Entering the decoding loop: blocks with DCT_BLOCK_DEPTH frames are decoded each iteration
+		printf("Starting decoding process\n");
 		framesRead = 0;
 		while(framesRead < framesToDecode) {
+
+			// Awaits for the decoding process to read at least bufferSize DCT coefficients.
 			while(expGolombDecodedDataSize < bufferSize) {
+				// Reading data from file
 				if (!eof) {
 					readResult = fread(zlibCompressedData + zlibCompressedDataSize, 1, bufferSize - zlibCompressedDataSize, inputFile);
 					if (readResult == 0) {
@@ -182,6 +191,7 @@ int decode(char * inputFileName, char * outputFileName, int width, int height, i
 					}
 				}
 				zlibCompressedDataSize += readResult;
+				// Applying inflate algorithm
 				if (zlibCompressedDataSize > 0) {
 					expGolombCodedDataSize += applyZlibDecompression(&zlibStream, zlibCompressedData, zlibCompressedDataSize, expGolombCodedData + expGolombCodedDataSize, bufferSize - expGolombCodedDataSize);
 					if (zlibStream.avail_in > 0) {
@@ -190,6 +200,7 @@ int decode(char * inputFileName, char * outputFileName, int width, int height, i
 					}
 					zlibCompressedDataSize = zlibStream.avail_in;
 				}
+				// Decoding the exp-golomb coded data
 				while (expGolombStream->bufferPosition < expGolombCodedDataSize && expGolombDecodedDataSize < bufferSize) {
 					expGolombDecodedData[expGolombDecodedDataSize] = expGolomb_readValue(expGolombStream);
 					expGolombDecodedDataSize++;
@@ -198,13 +209,18 @@ int decode(char * inputFileName, char * outputFileName, int width, int height, i
 				expGolomb_freeBuffer(expGolombStream, expGolombCodedDataSize, 0);
 				expGolombCodedDataSize = expGolombCodedDataSize - consumedBytes;
 			}
+			// The DCT coefficients read from the file are ordered in slices according to the function cubeUtils_diagonalSlices in CubeUtils.h.
+			// They are reordered here.
 			reorderDctCoeffs(inputData, bufferSize, expGolombDecodedData, slicesPositions);
 			expGolombDecodedDataSize -= bufferSize;
 			if (expGolombDecodedDataSize > 0) {
 				memmove(expGolombDecodedData, expGolombDecodedData + bufferSize, expGolombDecodedDataSize);
 			}
+
+			// Applying dequantization to the DCT coefficients.
 			applyDequantization(inputData, bufferSize);
 
+			// Sending coefficients to the device.
 			clEnqueueWriteBuffer(queue, kernelInputData, CL_TRUE, 0, bufferSize * sizeof(float), inputData, 0, NULL, NULL);
 
 			clResult = clSetKernelArg(kernel, 0, sizeof(cl_mem), &kernelInputData);
@@ -216,18 +232,28 @@ int decode(char * inputFileName, char * outputFileName, int width, int height, i
 				return 1;
 			}
 
+			// Running the Inverse DCT on the device.
 			clResult = clEnqueueNDRangeKernel(queue, kernel, 1, NULL, &bufferSize, &localSize, 0, NULL, NULL);
 			if (clResult != CL_SUCCESS) {
 				printf("Error sending command to OpenCL queue: %d", clResult);
 				return 1;
 			}
 
+			// Reading the resulting pixels. This function call blocks until the kernel execution is completed.
 			clResult = clEnqueueReadBuffer(queue, kernelOutputData, CL_TRUE, 0, bufferSize * sizeof(float), outputData, 0, NULL, NULL);
+
+			// Writing the resulting pixels to the output file
 			writeCubes(outputFile, outputData, width, height);
-			framesRead += DCT_BLOCK_SIZE;
+			framesRead += DCT_BLOCK_DEPTH;
+
+			printf("Frames processed: %d\n", framesRead);
 		}
 
+		// Flushing and closing the output file
 		fflush(outputFile);
+		fclose(outputFile);
+
+		printf("Decoding process completed");
 
 	} else {
 		printf("Error creating OpenCL context: %d", clResult);
