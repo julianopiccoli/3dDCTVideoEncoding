@@ -15,9 +15,13 @@ is using a sub-optimal "quantization function" for encoding and decoding videos.
 require any additional hardware to run, but takes a lot of time to encode/decode videos, althought it can use all available CPU cores. The
 C implementation uses OpenCL to accelerate the DCT algorithm by orders of magnitude, but it requires a GPU to run.
 
+To build the C code, you will need the GNU C Compiler and Make utility. Open the file Default/makefile and change the variables RM, EXECUTABLENAME to suit your operating system. The variable OPENCL_LIBRARY sould also be changed to point to the location of the OpenCL dynamic load library (in Windows it is usually located in C:\Windows\System32\OpenCL.dll). It is also necessary to obtain the OpenCL headers, which can be cloned from https://github.com/KhronosGroup/OpenCL-Headers. The path to these headers must be set in the OPENCL_HEADERS_PATH variable inside the makefile.
+
+You can also use the OpenCL version of the codec with integrated Intel GPUs that support the OpenCL technology, but you will probably need to lower the DCT_BLOCK_WIDTH, DCT_BLOCK_HEIGHT or DCT_BLOCK_DEPTH values declared in files codec.h and 3dDCT.cl (changing any of them to 4 is a good option).
+
 To try the codec, the following steps must be executed:
 
-1 - Create a raw source video with grayscale pixels (one byte per pixel) using the CaptureScreen utility of the Java project;
-2 - Encode the captured video using the Encoder program of the Java project or the codec utility provided by the C project;
-3 - Decode the resulting video using the Decoder program of the Java project or the codec utility provided by the C project;
-4 - Watch the decoded video using the RenderVideo utility of the Java project.
+- Create a raw source video with grayscale pixels (one byte per pixel) using the CaptureScreen utility of the Java project;
+- Encode the captured video using the Encoder program of the Java project or the codec utility provided by the C project;
+- Decode the resulting video using the Decoder program of the Java project or the codec utility provided by the C project;
+- Watch the decoded video using the RenderVideo utility of the Java project.
