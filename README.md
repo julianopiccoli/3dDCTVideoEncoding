@@ -22,6 +22,6 @@ You can also use the OpenCL version of the codec with integrated Intel GPUs that
 To try the codec, the following steps must be executed:
 
 - Create a raw source video with grayscale pixels (one byte per pixel) using the CaptureScreen utility of the Java project;
-- Encode the captured video using the Encoder program of the Java project or the codec utility provided by the C project;
-- Decode the resulting video using the Decoder program of the Java project or the codec utility provided by the C project;
+- Encode the captured video using the Encoder program of the Java project (slooooow) or the codec utility provided by the C project;
+- Decode the resulting video using the Decoder program of the Java project (also slow) or the codec utility provided by the C project;
 - Watch the decoded video using the RenderVideo utility of the Java project.
