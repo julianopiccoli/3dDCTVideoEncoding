@@ -46,6 +46,8 @@ public class RenderVideo {
 			BufferedImage frame = render.frame;
 			byte[] inputBuffer = new byte[frame.getWidth() * frame.getHeight()];
 			int[] rgbBuffer = new int[frame.getWidth() * frame.getHeight()];
+			long now = System.currentTimeMillis();
+			long nextFrameTimestamp = now;
 			
 			try (DataInputStream input = new DataInputStream(new FileInputStream(file))) {
 				
@@ -59,7 +61,12 @@ public class RenderVideo {
 					}
 					frame.setRGB(0, 0, frame.getWidth(), frame.getHeight(), rgbBuffer, 0, frame.getWidth());
 					render.repaint();
-					Thread.sleep(frameTimeInMs);
+					now = System.currentTimeMillis();
+					nextFrameTimestamp = nextFrameTimestamp + frameTimeInMs;
+					long timeToNextFrame = nextFrameTimestamp - now;
+					if (timeToNextFrame > 0) {
+						Thread.sleep(timeToNextFrame);
+					}
 				}
 				
 			} catch (IOException | InterruptedException e) {
@@ -74,14 +81,14 @@ public class RenderVideo {
 		
 		if (args.length < 4) {
 			System.out.println("Usage: java RenderVideo <input file> <width> <height> <framerate>");
-			System.out.println("Parameters <input file>, <width> and <height> are mandatory");
+			System.out.println("Parameters <input file>, <width>, <height> and <framerate> are mandatory");
 			System.exit(-1);
 		}
 		
 		File inputFile = new File(args[0]);
 		int width = Integer.parseInt(args[1]);
 		int height = Integer.parseInt(args[2]);
-		int fps = args.length > 3 ? Integer.parseInt(args[3]) : 24;
+		float fps = Float.parseFloat(args[3]);
 		long frameTime = (long) (1000.0f / fps);
 		
 		JFrame frame = new JFrame();

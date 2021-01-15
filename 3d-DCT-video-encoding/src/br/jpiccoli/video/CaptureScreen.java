@@ -21,8 +21,8 @@ public class CaptureScreen {
 
 		int fps = args.length > 1 ? Integer.parseInt(args[1]) : 24;
 		long frameTime = (long) (1000.0f / fps);
-		int horizontalScaleFactor = args.length > 2 ? Integer.parseInt(args[2]) : 2;
-		int verticalScaleFactor = args.length > 3 ? Integer.parseInt(args[3]) : 2;
+		int horizontalScaleFactor = args.length > 2 ? Integer.parseInt(args[2]) : 1;
+		int verticalScaleFactor = args.length > 3 ? Integer.parseInt(args[3]) : 1;
 		
 		GraphicsEnvironment environment = GraphicsEnvironment.getLocalGraphicsEnvironment();
 		DisplayMode displayMode = environment.getDefaultScreenDevice().getDisplayMode();
@@ -47,7 +47,7 @@ public class CaptureScreen {
 		byte[] output = new byte[imageWidth * imageHeight];
 		long start = System.currentTimeMillis();
 		long now = System.currentTimeMillis();
-		long nextFrame = now;
+		long nextFrameTimestamp = now;
 		
 		System.out.println("Screen capture will start in 5 seconds and will last for 10 seconds");
 		
@@ -78,9 +78,9 @@ public class CaptureScreen {
 			}
 			stream.write(output);
 			frameCount++;
-			nextFrame = nextFrame + frameTime;
+			nextFrameTimestamp = nextFrameTimestamp + frameTime;
 			now = System.currentTimeMillis();
-			long timeToNextFrame = nextFrame - now;
+			long timeToNextFrame = nextFrameTimestamp - now;
 			if (timeToNextFrame > 0) {
 				Thread.sleep(timeToNextFrame);
 			}
@@ -90,6 +90,7 @@ public class CaptureScreen {
 		System.out.println("Screen capture finished");
 		System.out.println("The output data has a resolution of " + imageWidth + "x" + imageHeight);
 		System.out.println(frameCount + " frames were captured");
+		System.out.println("Frame rate is " + (frameCount / 10.0f) + " fps");
 		
 		stream.flush();
 		stream.close();

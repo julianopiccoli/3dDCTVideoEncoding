@@ -6,6 +6,7 @@
 
 # Commands and variables which depend on the operating system
 RM := del
+CP := copy
 EXECUTABLENAME := codec.exe
 OPENCL_LIBRARY := C:\Windows\System32\OpenCL.dll
 
@@ -14,10 +15,7 @@ OPENCL_HEADERS_PATH = ..\..\..\OpenCL-Headers
 
 LIBS := -lz
 
-# All of the sources participating in the build are defined here
--include sources.mk
 -include subdir.mk
--include objects.mk
 
 ifneq ($(MAKECMDGOALS),clean)
 ifneq ($(strip $(C_DEPS)),)
@@ -37,12 +35,13 @@ codec: $(OBJS) $(OPENCL_LIBRARY)
 	@echo 'Building target: $@'
 	@echo 'Invoking: C Linker'
 	gcc  -o "codec" $(OBJS) $(OPENCL_LIBRARY) $(LIBS)
+	$(CP) $(CL_SRC) 3dDCT.cl
 	@echo 'Finished building target: $@'
 	@echo ' '
 
 # Other Targets
 clean:
-	-$(RM) $(EXECUTABLES)$(OBJS)$(C_DEPS) $(EXECUTABLENAME)
+	-$(RM) $(EXECUTABLES)$(OBJS)$(C_DEPS) $(EXECUTABLENAME) 3dDCT.cl
 	-@echo ' '
 
 .PHONY: all clean dependents

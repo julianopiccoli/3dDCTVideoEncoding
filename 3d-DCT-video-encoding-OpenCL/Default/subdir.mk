@@ -27,6 +27,8 @@ C_DEPS += \
 .\encoder.d \
 .\main.d 
 
+CL_SRC += \
+..\3dDCT.cl
 
 # Each subdirectory must supply rules for building sources it contributes
 %.o: ../%.c

@@ -15,8 +15,8 @@
 #define FACE_SIZE DCT_BLOCK_WIDTH * DCT_BLOCK_HEIGHT
 #define CUBE_SIZE FACE_SIZE * DCT_BLOCK_DEPTH
 
-int encode(char * inputFileName, char * outputFileName, int width, int height, int framesToEncode);
+int encode(char * inputFileName, char * outputFileName, int width, int height, int framesToEncode, int platformIndex);
 
-int decode(char * inputFileName, char * outputFileName, int width, int height, int framesToDecode);
+int decode(char * inputFileName, char * outputFileName, int width, int height, int framesToDecode, int platformIndex);
 
 #endif /* CODEC_H_ */

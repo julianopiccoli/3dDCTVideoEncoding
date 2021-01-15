@@ -85,7 +85,7 @@ int applyZlibCompression(z_stream * zlibStream, char * inputBuffer, size_t input
 
 }
 
-int encode(char * inputFileName, char * outputFileName, int width, int height, int framesToEncode) {
+int encode(char * inputFileName, char * outputFileName, int width, int height, int framesToEncode, int platformIndex) {
 
 	float * inputData;
 	float * outputData;
@@ -102,6 +102,7 @@ int encode(char * inputFileName, char * outputFileName, int width, int height, i
 	cl_int clResult;
 	cl_mem kernelInputData;
 	cl_mem kernelOutputData;
+	size_t maxWorkGroupSize;
 
 	size_t bufferSize;
 	size_t localSize;
@@ -138,7 +139,13 @@ int encode(char * inputFileName, char * outputFileName, int width, int height, i
 	expGolombStream = expGolomb_createStream(expGolombBuffer);
 
 	printf("Getting device id\n");
-	device = getDeviceId();
+	device = getDeviceId(platformIndex);
+	printf("Checking CL_DEVICE_MAX_WORK_GROUP_SIZE\n");
+	maxWorkGroupSize = getMaxWorkGroupSize(device);
+	if (maxWorkGroupSize < CUBE_SIZE) {
+		printf("CL_DEVICE_MAX_WORK_GROUP_SIZE of selected device is %d, which is lower than the required value of %d. Please try using a different platform (platforms can be listed by issuing command 'codec list_platforms').", maxWorkGroupSize, CUBE_SIZE);
+		exit(1);
+	}
 	printf("Creating OpenCL context\n");
 	context = clCreateContext(NULL, 1, &device, NULL, NULL, &clResult);
 	if (clResult == CL_SUCCESS) {

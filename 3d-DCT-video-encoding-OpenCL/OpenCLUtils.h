@@ -10,7 +10,13 @@
 
 #include <CL/cl.h>
 
-cl_device_id getDeviceId();
+void printAvailablePlatforms();
+
+cl_platform_id getPlatformIdForIndex(int platformIndex);
+
+cl_device_id getDeviceId(int platformIndex);
+
+size_t getMaxWorkGroupSize(cl_device_id deviceId);
 
 cl_program buildKernel(cl_context context, cl_device_id deviceId, const char * fileName);
 
