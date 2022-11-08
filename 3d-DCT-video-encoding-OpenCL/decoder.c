@@ -7,7 +7,7 @@
 #include "CubeUtils.h"
 #include "ExpGolomb.h"
 
-void writeCubes(FILE * outputFile, float * data, int width, int height) {
+void writeCubes(FILE * outputFile, cl_float * data, int width, int height) {
 
 	unsigned char * tempBuffer;
 	size_t totalWritten;
@@ -45,7 +45,7 @@ void writeCubes(FILE * outputFile, float * data, int width, int height) {
 
 }
 
-void applyDequantization(float * dctCoeff, size_t bufferSize) {
+void applyDequantization(cl_float * dctCoeff, size_t bufferSize) {
 	for (int offset = 0; offset < bufferSize; offset += CUBE_SIZE) {
 		for (int z = 0; z < DCT_BLOCK_DEPTH; z++) {
 			for (int y = 0; y < DCT_BLOCK_HEIGHT; y++) {
@@ -58,7 +58,7 @@ void applyDequantization(float * dctCoeff, size_t bufferSize) {
 	}
 }
 
-void reorderDctCoeffs(float * dctCoeff, size_t bufferSize, float * expGolombDecodedData, struct SlicesPositions * slicesPositions) {
+void reorderDctCoeffs(cl_float * dctCoeff, size_t bufferSize, cl_float * expGolombDecodedData, struct SlicesPositions * slicesPositions) {
 
 	int expGolombCodedDataPosition = 0;
 	for (int offset = 0; offset < bufferSize; offset += CUBE_SIZE) {
@@ -84,22 +84,24 @@ int applyZlibDecompression(z_stream * zlibStream, char * inputBuffer, size_t inp
 
 int decode(char * inputFileName, char * outputFileName, int width, int height, int framesToDecode, int platformIndex) {
 
-	float * inputData;
-	float * outputData;
+	cl_float * inputData;
+	cl_float * outputData;
 	char * zlibCompressedData;
 	char * expGolombCodedData;
-	float * expGolombDecodedData;
+	cl_float * expGolombDecodedData;
 
 	int framesRead;
 
 	cl_device_id device;
 	cl_context context;
 	cl_program program;
-	cl_kernel kernel;
+	cl_kernel partialSumsCalcKernel;
+	cl_kernel partialSumsAggregationKernel;
 	cl_command_queue queue;
 	cl_int clResult;
 	cl_mem kernelInputData;
 	cl_mem kernelOutputData;
+	cl_mem partialSums;
 	size_t maxWorkGroupSize;
 
 	struct SlicesPositions * slicesPositions;
@@ -108,6 +110,10 @@ int decode(char * inputFileName, char * outputFileName, int width, int height, i
 
 	size_t bufferSize;
 	size_t localSize;
+	size_t partialSumsSize;
+	size_t partialSumsPerCubeSize;
+
+	cl_event event;
 
 	FILE * inputFile;
 	FILE * outputFile;
@@ -123,11 +129,11 @@ int decode(char * inputFileName, char * outputFileName, int width, int height, i
 	localSize = CUBE_SIZE;
 	inputFile = fopen(inputFileName, "rb");
 	outputFile = fopen(outputFileName, "wb");
-	inputData = (float *) malloc(bufferSize * sizeof(float));
-	outputData = (float *) malloc(bufferSize * sizeof(float));
+	inputData = (cl_float *) malloc(bufferSize * sizeof(cl_float));
+	outputData = (cl_float *) malloc(bufferSize * sizeof(cl_float));
 	zlibCompressedData = (char *) malloc(bufferSize);
 	expGolombCodedData = (char *) malloc(bufferSize);
-	expGolombDecodedData = (float *) malloc(bufferSize * sizeof(float));
+	expGolombDecodedData = (cl_float *) malloc(bufferSize * sizeof(cl_float));
 	zlibCompressedDataSize = 0;
 	expGolombCodedDataSize = 0;
 	expGolombDecodedDataSize = 0;
@@ -147,10 +153,12 @@ int decode(char * inputFileName, char * outputFileName, int width, int height, i
 	printf("Getting device id\n");
 	device = getDeviceId(platformIndex);
 	maxWorkGroupSize = getMaxWorkGroupSize(device);
-	if (maxWorkGroupSize < CUBE_SIZE) {
-		printf("CL_DEVICE_MAX_WORK_GROUP_SIZE of selected device is %d, which is lower than the required value of %d. Please try using a different platform (platforms can be listed by issuing command 'codec list_platforms').", maxWorkGroupSize, CUBE_SIZE);
-		exit(1);
+	while(localSize > maxWorkGroupSize) {
+		localSize = localSize / 2;
 	}
+	printf("Using group size with %d work items\n", localSize);
+	partialSumsPerCubeSize = CUBE_SIZE / localSize;
+	partialSumsSize = bufferSize * partialSumsPerCubeSize;
 	printf("Creating OpenCL context\n");
 	context = clCreateContext(NULL, 1, &device, NULL, NULL, &clResult);
 	if (clResult == CL_SUCCESS) {
@@ -159,14 +167,19 @@ int decode(char * inputFileName, char * outputFileName, int width, int height, i
 		// Loading the kernel and creating the needed structures.
 		program = buildKernel(context, device, "3dDCT.cl");
 		printf("Creating buffers\n");
-		kernelInputData = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, bufferSize * sizeof(float), inputData, &clResult);
+		kernelInputData = clCreateBuffer(context, CL_MEM_READ_ONLY, bufferSize * sizeof(cl_float), NULL, &clResult);
 		if (clResult != CL_SUCCESS) {
 			printf("Error creating OpenCL input data buffer: %d", clResult);
 			return 1;
 		}
-		kernelOutputData = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, bufferSize * sizeof(float), outputData, &clResult);
+		kernelOutputData = clCreateBuffer(context, CL_MEM_WRITE_ONLY, bufferSize * sizeof(cl_float), NULL, &clResult);
 		if (clResult != CL_SUCCESS) {
 			printf("Error creating OpenCL output data buffer: %d", clResult);
+			return 1;
+		}
+		partialSums = clCreateBuffer(context, CL_MEM_READ_WRITE, partialSumsSize * sizeof(cl_float), NULL, &clResult);
+		if (clResult != CL_SUCCESS) {
+			printf("Error creating OpenCL partial sums data buffer: %d", clResult);
 			return 1;
 		}
 		printf("Creating command queue\n");
@@ -175,10 +188,16 @@ int decode(char * inputFileName, char * outputFileName, int width, int height, i
 			printf("Error creating OpenCL command queue: %d", clResult);
 			return 1;
 		}
-		printf("Creating kernel\n");
-		kernel = clCreateKernel(program, "idct", &clResult);
+		printf("Creating kernels\n");
+		partialSumsCalcKernel = clCreateKernel(program, "idct_calculate_partial_sums", &clResult);
 		if (clResult != CL_SUCCESS) {
-			printf("Error creating OpenCL kernel: %d", clResult);
+			printf("Error creating OpenCL kernel 1: %d", clResult);
+			return 1;
+		}
+
+		partialSumsAggregationKernel = clCreateKernel(program, "idct_aggregate_partial_sums", &clResult);
+		if (clResult != CL_SUCCESS) {
+			printf("Error creating OpenCL kernel 2: %d", clResult);
 			return 1;
 		}
 
@@ -227,11 +246,17 @@ int decode(char * inputFileName, char * outputFileName, int width, int height, i
 			applyDequantization(inputData, bufferSize);
 
 			// Sending coefficients to the device.
-			clEnqueueWriteBuffer(queue, kernelInputData, CL_TRUE, 0, bufferSize * sizeof(float), inputData, 0, NULL, NULL);
+			clEnqueueWriteBuffer(queue, kernelInputData, CL_TRUE, 0, bufferSize * sizeof(cl_float), inputData, 0, NULL, NULL);
 
-			clResult = clSetKernelArg(kernel, 0, sizeof(cl_mem), &kernelInputData);
-			clResult |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &kernelOutputData);
-			clResult |= clSetKernelArg(kernel, 2, localSize * sizeof(float), NULL);
+			const cl_int cubeWidth = DCT_BLOCK_WIDTH;
+			const cl_int cubeHeight = DCT_BLOCK_HEIGHT;
+			const cl_int cubeDepth = DCT_BLOCK_DEPTH;
+			clResult = clSetKernelArg(partialSumsCalcKernel, 0, sizeof(cl_int), &cubeWidth);
+			clResult |= clSetKernelArg(partialSumsCalcKernel, 1, sizeof(cl_int), &cubeHeight);
+			clResult |= clSetKernelArg(partialSumsCalcKernel, 2, sizeof(cl_int), &cubeDepth);
+			clResult |= clSetKernelArg(partialSumsCalcKernel, 3, sizeof(cl_mem), &kernelInputData);
+			clResult |= clSetKernelArg(partialSumsCalcKernel, 4, sizeof(cl_mem), &partialSums);
+			clResult |= clSetKernelArg(partialSumsCalcKernel, 5, localSize * sizeof(cl_float), NULL);
 
 			if (clResult != CL_SUCCESS) {
 				printf("Error setting OpenCL kernel args: %d", clResult);
@@ -239,14 +264,32 @@ int decode(char * inputFileName, char * outputFileName, int width, int height, i
 			}
 
 			// Running the Inverse DCT on the device.
-			clResult = clEnqueueNDRangeKernel(queue, kernel, 1, NULL, &bufferSize, &localSize, 0, NULL, NULL);
+			clResult = clEnqueueNDRangeKernel(queue, partialSumsCalcKernel, 1, NULL, &bufferSize, &localSize, 0, NULL, &event);
 			if (clResult != CL_SUCCESS) {
-				printf("Error sending command to OpenCL queue: %d", clResult);
+				printf("Error sending kernel 1 execution command to OpenCL queue: %d", clResult);
+				return 1;
+			}
+
+			clResult = clSetKernelArg(partialSumsAggregationKernel, 0, sizeof(cl_int), &cubeWidth);
+			clResult |= clSetKernelArg(partialSumsAggregationKernel, 1, sizeof(cl_int), &cubeHeight);
+			clResult |= clSetKernelArg(partialSumsAggregationKernel, 2, sizeof(cl_int), &cubeDepth);
+			clResult |= clSetKernelArg(partialSumsAggregationKernel, 3, sizeof(cl_mem), &partialSums);
+			clResult |= clSetKernelArg(partialSumsAggregationKernel, 4, sizeof(cl_mem), &kernelOutputData);
+			clResult |= clSetKernelArg(partialSumsAggregationKernel, 5, partialSumsPerCubeSize * sizeof(cl_float), NULL);
+
+			if (clResult != CL_SUCCESS) {
+				printf("Error setting OpenCL kernel args: %d", clResult);
+				return 1;
+			}
+
+			clResult = clEnqueueNDRangeKernel(queue, partialSumsAggregationKernel, 1, NULL, &partialSumsSize, &partialSumsPerCubeSize, 1, &event, NULL);
+			if (clResult != CL_SUCCESS) {
+				printf("Error sending kernel 2 execution command to OpenCL queue: %d", clResult);
 				return 1;
 			}
 
 			// Reading the resulting pixels. This function call blocks until the kernel execution is completed.
-			clResult = clEnqueueReadBuffer(queue, kernelOutputData, CL_TRUE, 0, bufferSize * sizeof(float), outputData, 0, NULL, NULL);
+			clResult = clEnqueueReadBuffer(queue, kernelOutputData, CL_TRUE, 0, bufferSize * sizeof(cl_float), outputData, 0, NULL, NULL);
 
 			// Writing the resulting pixels to the output file
 			writeCubes(outputFile, outputData, width, height);
