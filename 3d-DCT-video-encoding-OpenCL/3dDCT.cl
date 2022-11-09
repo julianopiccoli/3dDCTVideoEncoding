@@ -8,7 +8,7 @@
  * @param valuesSize Quantity of elements on the input vector
  * @param localId Id of the work item in its local work group
  */
-void parallelSumReduction(float * values, size_t valuesSize, const localId) {
+void parallelSumReduction(__local float * values, size_t valuesSize, const localId) {
 	for (size_t stride = valuesSize / 2; stride > 0; stride = stride / 2, valuesSize = valuesSize / 2) {
 		barrier(CLK_LOCAL_MEM_FENCE);
 		if (localId < stride) {
