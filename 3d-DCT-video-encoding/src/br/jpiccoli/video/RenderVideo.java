@@ -16,14 +16,24 @@ public class RenderVideo {
 	private static class ImageRender extends JComponent {
 	
 		private BufferedImage frame;
+		private float aspectRatio;
 		
 		public ImageRender(int width, int height) {
 			frame = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+			aspectRatio = ((float) width) / ((float) height);
 		}
 		
 		@Override
 		public void paint(Graphics g) {
-			g.drawImage(frame, 0, 0, null);
+			int availableWidth = getWidth();
+			int availableHeight = getHeight();
+			int imageHeight = (int) (availableWidth / aspectRatio);
+			if (imageHeight <= availableHeight) {
+				g.drawImage(frame, 0, (availableHeight - imageHeight) / 2, availableWidth, imageHeight, null);
+			} else {
+				int imageWidth = (int) (availableHeight * aspectRatio);
+				g.drawImage(frame, (availableWidth - imageWidth) / 2, 0, imageWidth, availableHeight, null);
+			}
 		}
 		
 	}
@@ -44,7 +54,7 @@ public class RenderVideo {
 		public void run() {
 			
 			BufferedImage frame = render.frame;
-			byte[] inputBuffer = new byte[frame.getWidth() * frame.getHeight()];
+			byte[] inputBuffer = new byte[frame.getWidth() * frame.getHeight() * 3];
 			int[] rgbBuffer = new int[frame.getWidth() * frame.getHeight()];
 			long now = System.currentTimeMillis();
 			long nextFrameTimestamp = now;
@@ -53,20 +63,21 @@ public class RenderVideo {
 				
 				while(true) {
 					input.readFully(inputBuffer);
-					for (int index = 0; index < inputBuffer.length; index++) {
-						int r = (inputBuffer[index] & 0xFF) << 16;
-						int g = (inputBuffer[index] & 0xFF) << 8;
-						int b = inputBuffer[index] & 0xFF;
+					now = System.currentTimeMillis();
+					long timeToNextFrame = nextFrameTimestamp - now;
+					if (timeToNextFrame > 0) {
+						Thread.sleep(timeToNextFrame);
+					}					
+					for (int index = 0; index < rgbBuffer.length; index++) {
+						int r = (inputBuffer[index * 3] & 0xFF) << 16;
+						int g = (inputBuffer[index * 3 + 1] & 0xFF) << 8;
+						int b = inputBuffer[index * 3 + 2] & 0xFF;
 						rgbBuffer[index] = r | g | b;
 					}
 					frame.setRGB(0, 0, frame.getWidth(), frame.getHeight(), rgbBuffer, 0, frame.getWidth());
 					render.repaint();
-					now = System.currentTimeMillis();
 					nextFrameTimestamp = nextFrameTimestamp + frameTimeInMs;
-					long timeToNextFrame = nextFrameTimestamp - now;
-					if (timeToNextFrame > 0) {
-						Thread.sleep(timeToNextFrame);
-					}
+					
 				}
 				
 			} catch (IOException | InterruptedException e) {
@@ -102,7 +113,7 @@ public class RenderVideo {
 			Thread thread = new Thread(videoReader);
 			thread.start();
 		});
-		frame.setSize(width, height);
+		frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		frame.setVisible(true);
 		
