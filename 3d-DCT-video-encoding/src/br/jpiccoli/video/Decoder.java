@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.zip.DataFormatException;
 import java.util.zip.Inflater;
 
+import br.jpiccoli.video.dct.InverseDCT;
+
 public class Decoder {
 	
 	public static void main(String[] args) throws IOException, DataFormatException {
@@ -89,12 +91,13 @@ public class Decoder {
 				}
 			}
 		}
-
+		
 		// Apply the Inverse DCT to the dequantized data. This call is blocking and
 		// the process is slow.
 		System.out.println("Applying inverse DCT. This process may take some time to complete...");
 		double[] videoPixels = new double[dctCoeffMatrix.length];
-		DCT.applyInverseDctInBlocks(width, height, blockSize, videoPixels, dctCoeffMatrix);
+		InverseDCT inverseDCT = new InverseDCT(dctCoeffMatrix, videoPixels, width, height, blockSize, blockSize, blockSize);
+		inverseDCT.run();
 		
 		// Writing decoded data to output file
 		System.out.println("Writing video to output file");

@@ -71,6 +71,7 @@ public class CaptureScreen {
 			
 		}
 
+		System.out.println("Capture finished. Flushing data...");
 		imageProcessingThread.interrupt();
 		imageProcessingThread.join();
 		System.out.println("Screen capture finished");

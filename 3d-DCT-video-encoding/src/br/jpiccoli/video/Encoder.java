@@ -7,6 +7,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.zip.Deflater;
 
+import br.jpiccoli.video.dct.DCT;
+
 public class Encoder {
 
 	public static void main(String[] args) throws IOException {
@@ -56,7 +58,8 @@ public class Encoder {
 		// Applying DCT. This call blocks until the DCT is completed.
 		// The process is executed in multiple threads, but it is
 		// still VERY slow.
-		DCT.applyDctInBlocks(width, height, blockSize, pixels, dctCoeff);
+		DCT dct = new DCT(pixels, dctCoeff, width, height, blockSize, blockSize, blockSize);
+		dct.run();
 		
 		System.out.println("DCT complete. Applying quantization.");
 		
