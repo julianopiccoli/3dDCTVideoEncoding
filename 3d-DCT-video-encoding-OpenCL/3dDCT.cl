@@ -106,7 +106,7 @@ __kernel void dct_aggregate_partial_sums(int cubeWidth, int cubeHeight, int cube
 	
 	const int cubeFaceSize = cubeWidth * cubeHeight;
 	const int cubeSize = cubeFaceSize * cubeDepth;
-	const float scale = 2.0f / sqrt((float) cubeSize);
+	const float scale = sqrt(8.0f / (float) cubeSize);
 	
 	const size_t groupSize = get_local_size(0);
 	const size_t globalAddr = get_global_id(0);
@@ -240,7 +240,7 @@ __kernel void idct_aggregate_partial_sums(int cubeWidth, int cubeHeight, int cub
 
 	const int cubeFaceSize = cubeWidth * cubeHeight;
 	const int cubeSize = cubeFaceSize * cubeDepth;
-	const float scale = 2.0f / sqrt((float) cubeSize);
+	const float scale = sqrt(8.0f / (float) cubeSize);
 	
 	const size_t groupSize = get_local_size(0);
 	const size_t globalAddr = get_global_id(0);
