@@ -86,8 +86,8 @@ public class InverseDCT extends Transform {
 	 */
 	private void initialize() {
 		
-		this.coefficients = new double[cubeWidth * cubeHeight * cubeDepth][cubeWidth * cubeHeight * cubeDepth];
-		final double scale = (double) (2.0f / Math.sqrt(cubeWidth * cubeHeight * cubeDepth));
+		this.coefficients = new double[cubeSize][cubeSize];
+		final double scale = (double) (DIMENSIONAL_FACTOR / Math.sqrt(cubeSize));
 		
 		final double piOverWidth = Math.PI / (float) cubeWidth;
 		final double piOverHeight = Math.PI / (float) cubeHeight;
@@ -109,13 +109,13 @@ public class InverseDCT extends Transform {
 								double c1 = 1;
 								double c2 = 1;
 								if (k0 == 0) {
-									c0 = 1.0f / Math.sqrt(2.0);
+									c0 = INVERSE_SQRT_2;
 								}
 								if (k1 == 0) {
-									c1 = 1.0f / Math.sqrt(2.0);
+									c1 = INVERSE_SQRT_2;
 								}
 								if (k2 == 0) {
-									c2 = 1.0f / Math.sqrt(2.0);
+									c2 = INVERSE_SQRT_2;
 								}
 								
 								final int inputIndex = k0 * cubeFaceSize + k1 * cubeWidth + k2;
@@ -135,7 +135,7 @@ public class InverseDCT extends Transform {
 	private void idct3d(final int x, final int y, final int z) {
 		
 		final int offset = z * frameSize + y * frameWidth + x;
-		double scale = (double) (2.0f / Math.sqrt(cubeWidth * cubeHeight * cubeDepth));
+		double scale = (double) (DIMENSIONAL_FACTOR / Math.sqrt(cubeWidth * cubeHeight * cubeDepth));
 		
 		for (int n0 = 0; n0 < cubeDepth; n0++) {
 			for (int n1 = 0; n1 < cubeHeight; n1++) {
@@ -151,13 +151,13 @@ public class InverseDCT extends Transform {
 								double c1 = 1;
 								double c2 = 1;
 								if (k0 == 0) {
-									c0 = 1.0f / Math.sqrt(2.0);
+									c0 = INVERSE_SQRT_2;
 								}
 								if (k1 == 0) {
-									c1 = 1.0f / Math.sqrt(2.0);
+									c1 = INVERSE_SQRT_2;
 								}
 								if (k2 == 0) {
-									c2 = 1.0f / Math.sqrt(2.0);
+									c2 = INVERSE_SQRT_2;
 								}
 								int inputPosition = offset + k0 * frameSize + k1 * frameWidth + k2;
 								double inputValue = input[inputPosition];

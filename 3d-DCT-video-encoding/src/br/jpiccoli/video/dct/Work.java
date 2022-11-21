@@ -1,5 +1,7 @@
 package br.jpiccoli.video.dct;
 
+import java.util.concurrent.CountDownLatch;
+
 /**
  * Runnable containing part of the DCT/Inverse DCT transform work.
  * 
@@ -8,23 +10,22 @@ package br.jpiccoli.video.dct;
 class Work implements Runnable {
 	
 	private final Transform dct;
-	private final int initialZ;
-	private final int finalZ;
+	private final int x;
+	private final int y;
+	private final int z;
+	private final CountDownLatch countDownLatch;
 
-	Work(final Transform dct, final int initialZ, final int finalZ) {
+	Work(final Transform dct, final int x, final int y, final int z, final CountDownLatch countDownLatch) {
 		this.dct = dct;
-		this.initialZ = initialZ;
-		this.finalZ = finalZ;
+		this.x = x;
+		this.y = y;
+		this.z = z;
+		this.countDownLatch = countDownLatch;
 	}
 
 	public void run() {
-		for (int z = initialZ; z < finalZ; z += dct.cubeDepth) {
-			for (int y = 0; y < dct.frameHeight; y += dct.cubeHeight) {
-				for (int x = 0; x < dct.frameWidth; x += dct.cubeWidth) {
-					dct.apply(x, y, z);
-				}
-			}
-		}
+		dct.apply(x, y, z);
+		countDownLatch.countDown();
 	}
 
 }

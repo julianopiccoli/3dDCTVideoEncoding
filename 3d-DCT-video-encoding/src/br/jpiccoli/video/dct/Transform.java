@@ -1,8 +1,9 @@
 package br.jpiccoli.video.dct;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Base class for both the DCT and the inverse DCT transforms.
@@ -11,6 +12,14 @@ import java.util.concurrent.TimeUnit;
  */
 public abstract class Transform {
 
+	/*
+	 * The number 3.0 in the expression below represents the number of dimensions of the
+	 * cubes processed by the DCT and inverse DCT transforms. This expression is used in the
+	 * scale factor that is applied when calculating each frequency/pixel.
+	 */
+	protected static final double DIMENSIONAL_FACTOR = Math.sqrt(Math.pow(2.0f, 3.0f));
+	protected static final double INVERSE_SQRT_2 = 1.0f / Math.sqrt(2.0f);
+	
 	protected final double[] input;
 	protected final double[] output;
 	protected final int frameWidth;
@@ -18,6 +27,8 @@ public abstract class Transform {
 	protected final int cubeWidth;
 	protected final int cubeHeight;
 	protected final int cubeDepth;
+	protected final int cubeFaceSize;
+	protected final int cubeSize;
 	protected final int frameSize;
 
 	/**
@@ -39,29 +50,56 @@ public abstract class Transform {
 		this.cubeWidth = cubeWidth;
 		this.cubeHeight = cubeHeight;
 		this.cubeDepth = cubeDepth;
+		this.cubeFaceSize = cubeWidth * cubeHeight;
+		this.cubeSize = cubeFaceSize * cubeDepth;
 		this.frameSize = frameWidth * frameHeight;
 	}
 
 	/**
 	 * Executes the transform using multiple threads.
-	 * This method blocks the calling thread until the computation is completed.
+	 * 
+	 * @throws InterruptedException
 	 */
-	public void run() {
-		
-		final ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-		final int framesCount = input.length / frameSize;
+	public void run() throws InterruptedException {
+		run(Runtime.getRuntime().availableProcessors());
+	}
 	
-		for (int frame = 0; frame < framesCount; frame += cubeDepth) {
-			executor.execute(new Work(this, frame, frame + cubeDepth));
+	/**
+	 * Executes the transform using the provided number of threads.
+	 * 
+	 * @param threads Number of threads that will execute the transform.
+	 * 
+	 * @throws InterruptedException
+	 */
+	public void run(int threads) throws InterruptedException {
+		final ExecutorService executor = Executors.newFixedThreadPool(threads);
+		run(executor);
+		executor.shutdown();
+	}
+	
+	/**
+	 * Executes the transform using the given executor.
+	 * This method blocks the calling thread until the computation is completed.
+	 * 
+	 * @param executor Executor that will be used to dispatch the transform tasks.
+	 * 
+	 * @throws InterruptedException 
+	 */
+	public void run(final Executor executor) throws InterruptedException {
+		
+		final int framesCount = input.length / frameSize;
+		final int cubesCount = (frameSize * framesCount) / cubeSize;
+		final CountDownLatch countDownLatch = new CountDownLatch(cubesCount);
+		
+		for (int z = 0; z < framesCount; z += cubeDepth) {
+			for (int y = 0; y < frameHeight; y += cubeHeight) {
+				for (int x = 0; x < frameWidth; x += cubeWidth) {
+					executor.execute(new Work(this, x, y, z, countDownLatch));
+				}
+			}
 		}
 		
-		executor.shutdown();
-		try {
-			executor.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
-		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+		countDownLatch.await();
 		
 	}
 	

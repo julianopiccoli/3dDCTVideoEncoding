@@ -11,7 +11,7 @@ import br.jpiccoli.video.dct.DCT;
 
 public class Encoder {
 
-	public static void main(String[] args) throws IOException {
+	public static void main(String[] args) throws IOException, InterruptedException {
 		
 		if (args.length < 4) {
 			System.out.println("Usage: java Encoder <input file> <output file> <frame width> <frame height> <number of frames to encode");
@@ -25,7 +25,9 @@ public class Encoder {
 		int width = Integer.parseInt(args[2]);
 		int height = Integer.parseInt(args[3]);
 		int depth = 0;
-		int blockSize = 8;
+		int cubeWidth = 8;
+		int cubeHeight = 8;
+		int cubeDepth = 8;
 		int frameSize = width * height;
 		if (args.length >= 4) {
 			depth = Integer.parseInt(args[4]);
@@ -34,7 +36,7 @@ public class Encoder {
 		}
 		
 		// Depth must be a multiple of blockSize.
-		int exceedingFrames = depth % blockSize;
+		int exceedingFrames = depth % cubeDepth;
 		depth -= exceedingFrames;
 		
 		System.out.println("Reading input file");
@@ -58,9 +60,9 @@ public class Encoder {
 		// Applying DCT. This call blocks until the DCT is completed.
 		// The process is executed in multiple threads, but it is
 		// still VERY slow.
-		DCT dct = new DCT(pixels, dctCoeff, width, height, blockSize, blockSize, blockSize);
+		DCT dct = new DCT(pixels, dctCoeff, width, height, cubeWidth, cubeHeight, cubeDepth);
 		dct.run();
-		
+				
 		System.out.println("DCT complete. Applying quantization.");
 		
 		pixels = null;
@@ -70,12 +72,12 @@ public class Encoder {
 		// Quantization of the DCT output. This process divides each sample
 		// of the DCT cube by five times the sum of its coordinates in the cube.
 		// This turns most of the higher frequencies to zero.
-		for (int z = 0; z < depth; z += blockSize) {
-			for (int y = 0; y < height; y += blockSize) {
-				for (int x = 0; x < width; x += blockSize) {
-					for (int k = 0; k < blockSize; k++) {
-						for (int i = 0; i < blockSize; i++) {
-							for (int j = 0; j < blockSize; j++) {
+		for (int z = 0; z < depth; z += cubeDepth) {
+			for (int y = 0; y < height; y += cubeHeight) {
+				for (int x = 0; x < width; x += cubeWidth) {
+					for (int k = 0; k < cubeDepth; k++) {
+						for (int i = 0; i < cubeHeight; i++) {
+							for (int j = 0; j < cubeWidth; j++) {
 								int dctCoeffCubePosition = (z + k) * frameSize + (y + i) * width + x + j;
 								quantizationOutput[quantizationOutputIndex] = Math.round(dctCoeff[dctCoeffCubePosition] / Math.max(1, 5 * (i + j + k)));
 								quantizationOutputIndex++;
@@ -93,16 +95,17 @@ public class Encoder {
 		
 		// The DCT Coefficients inside the cubes are listed in diagonal slices to maximize the lengths
 		// of the zeroes sequences. This increases the efficiency of the deflate compressor.
-		List<int[]> positions = CubeUtils.diagonalSlices(blockSize, blockSize, blockSize);
+		List<int[]> positions = CubeUtils.diagonalSlices(cubeWidth, cubeHeight, cubeDepth);
 		
 		// Applying Exp-Golomb coding to the quantized data.
 		ExpGolombWriter writer = new ExpGolombWriter();
 		writer.setOutput(buffer);
-		int blockLength = blockSize * blockSize * blockSize;
+		int blockLength = cubeWidth * cubeHeight * cubeDepth;
+		int cubeFaceSize = cubeWidth * cubeHeight;
 		for (int offset = 0; offset < quantizationOutput.length; offset += blockLength) {
 			for (int index = 0; index < positions.size(); index++) {
 				int[] position = positions.get(index);
-				int dctCoeffInt = (int) quantizationOutput[offset + position[0] + (position[1] * blockSize) + (position[2] * blockSize * blockSize)];
+				int dctCoeffInt = (int) quantizationOutput[offset + position[0] + (position[1] * cubeWidth) + (position[2] * cubeFaceSize)];
 				writer.writeValue(dctCoeffInt);
 			}
 		}

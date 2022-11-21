@@ -76,9 +76,9 @@ public class DCT extends Transform {
 	 */
 	private void initialize() {
 		
-		this.multiplications = new ArrayList<>(cubeWidth * cubeHeight * cubeDepth);
+		this.multiplications = new ArrayList<>(cubeSize);
 		
-		final double scale = (double) (2.0f / Math.sqrt(cubeWidth * cubeHeight * cubeDepth));
+		final double scale = (double) (DIMENSIONAL_FACTOR / Math.sqrt(cubeSize));
 		
 		final double piOverWidth = Math.PI / (float) cubeWidth;
 		final double piOverHeight = Math.PI / (float) cubeHeight;
@@ -88,19 +88,19 @@ public class DCT extends Transform {
 			for (int k1 = 0; k1 < cubeHeight; k1++) {
 				for (int k2 = 0; k2 < cubeWidth; k2++) {
 					
-					final Map<Long, Multiplication> butterflyMap = new HashMap<>();
+					final Map<Long, Multiplication> multiplicationsMap = new HashMap<>();
 					
 					double c0 = 1;
 					double c1 = 1;
 					double c2 = 1;
 					if (k0 == 0) {
-						c0 = 1.0f / Math.sqrt(2.0);
+						c0 = INVERSE_SQRT_2;
 					}
 					if (k1 == 0) {
-						c1 = 1.0f / Math.sqrt(2.0);
+						c1 = INVERSE_SQRT_2;
 					}
 					if (k2 == 0) {
-						c2 = 1.0f / Math.sqrt(2.0);
+						c2 = INVERSE_SQRT_2;
 					}
 					
 					for (int n0 = 0; n0 < cubeDepth; n0++) {
@@ -114,21 +114,21 @@ public class DCT extends Transform {
 								// The first 9 decimal places are taken into account for the comparison.
 								final long longCoefficient = (long) (coefficient * 1E9);
 								if (longCoefficient == 0) continue;	// Removing zero coefficients.
-								Multiplication butterflyElement = butterflyMap.get(longCoefficient);
-								if (butterflyElement == null) {
+								Multiplication multiplication = multiplicationsMap.get(longCoefficient);
+								if (multiplication == null) {
 									// If no other coefficient calculated so far is equivalent to this one,
 									// a new Multiplication instance is created. See the description for class
 									// Multiplication below.
-									butterflyElement = new Multiplication(coefficient);
-									butterflyMap.put(longCoefficient, butterflyElement);
+									multiplication = new Multiplication(coefficient);
+									multiplicationsMap.put(longCoefficient, multiplication);
 								}
-								butterflyElement.offsets.add(inputOffset);
+								multiplication.offsets.add(inputOffset);
 								
 							}
 						}
 					}
 				
-					multiplications.add(new LinkedList<DCT.Multiplication>(butterflyMap.values()));
+					multiplications.add(new LinkedList<DCT.Multiplication>(multiplicationsMap.values()));
 					
 				}
 				
@@ -184,7 +184,7 @@ public class DCT extends Transform {
 	private void dct3d(final int x, final int y, final int z) {
 		
 		final int offset = z * frameSize + y * frameWidth + x;
-		double scale = (double) (2.0f / Math.sqrt(cubeWidth * cubeHeight * cubeDepth));
+		double scale = (double) (DIMENSIONAL_FACTOR / Math.sqrt(cubeWidth * cubeHeight * cubeDepth));
 		
 		for (int k0 = 0; k0 < cubeDepth; k0++) {
 			for (int k1 = 0; k1 < cubeHeight; k1++) {
@@ -208,13 +208,13 @@ public class DCT extends Transform {
 					double c1 = 1;
 					double c2 = 1;
 					if (k0 == 0) {
-						c0 = 1.0f / Math.sqrt(2.0);
+						c0 = INVERSE_SQRT_2;
 					}
 					if (k1 == 0) {
-						c1 = 1.0f / Math.sqrt(2.0);
+						c1 = INVERSE_SQRT_2;
 					}
 					if (k2 == 0) {
-						c2 = 1.0f / Math.sqrt(2.0);
+						c2 = INVERSE_SQRT_2;
 					}
 					output[outputPosition] = scale * c0 * c1 * c2 * output[outputPosition];
 					

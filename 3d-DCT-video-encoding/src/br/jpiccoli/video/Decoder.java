@@ -12,7 +12,7 @@ import br.jpiccoli.video.dct.InverseDCT;
 
 public class Decoder {
 	
-	public static void main(String[] args) throws IOException, DataFormatException {
+	public static void main(String[] args) throws IOException, DataFormatException, InterruptedException {
 		
 		if (args.length < 5) {
 			System.out.println("Usage: java Decoder <input file> <output file> <frame width> <frame height> <number of frames to decode>");
@@ -26,11 +26,13 @@ public class Decoder {
 		int width = Integer.parseInt(args[2]);
 		int height = Integer.parseInt(args[3]);
 		int depth = Integer.parseInt(args[4]);
-		int blockSize = 8;
+		int cubeWidth = 8;
+		int cubeHeight = 8;
+		int cubeDepth = 8;
 		int frameSize = width * height;
 		
 		// Depth must be a multiple of blockSize.
-		int exceedingFrames = depth % blockSize;
+		int exceedingFrames = depth % cubeDepth;
 		depth -= exceedingFrames;
 		
 		// Read and inflate the input file contents. The inflated
@@ -61,14 +63,15 @@ public class Decoder {
 		ExpGolombReader expGolombReader = new ExpGolombReader();
 		expGolombReader.setInput(inflatedDataBuffer);
 		
-		List<int[]> positions = CubeUtils.diagonalSlices(blockSize, blockSize, blockSize);
+		List<int[]> positions = CubeUtils.diagonalSlices(cubeWidth, cubeHeight, cubeDepth);
 		
 		double[] quantizationInput = new double[width * height * depth];
-		int blockLength = blockSize * blockSize * blockSize;
+		final int cubeFaceSize = cubeWidth * cubeHeight;
+		final int blockLength = cubeFaceSize * cubeDepth;
 		for (int offset = 0; offset < quantizationInput.length; offset += blockLength) {
 			for (int index = 0; index < positions.size(); index++) {
 				int[] position = positions.get(index);
-				quantizationInput[offset + position[0] + (position[1] * blockSize) + (position[2] * blockSize * blockSize)] = expGolombReader.readValue();
+				quantizationInput[offset + position[0] + (position[1] * cubeWidth) + (position[2] * cubeFaceSize)] = expGolombReader.readValue();
 			}
 		}
 
@@ -76,12 +79,12 @@ public class Decoder {
 		int quantizationInputPosition = 0;
 		// Dequantize the DCT cubes
 		System.out.println("Dequantizing cubes");
-		for (int z = 0; z < depth; z += blockSize) {
-			for (int y = 0; y < height; y += blockSize) {
-				for (int x = 0; x < width; x += blockSize) {
-					for (int k = 0; k < blockSize; k++) {
-						for (int i = 0; i < blockSize; i++) {
-							for (int j = 0; j < blockSize; j++) {
+		for (int z = 0; z < depth; z += cubeDepth) {
+			for (int y = 0; y < height; y += cubeHeight) {
+				for (int x = 0; x < width; x += cubeWidth) {
+					for (int k = 0; k < cubeDepth; k++) {
+						for (int i = 0; i < cubeHeight; i++) {
+							for (int j = 0; j < cubeWidth; j++) {
 								int dctCoeffCubePosition = (z + k) * frameSize + (y + i) * width + x + j;
 								dctCoeffMatrix[dctCoeffCubePosition] = Math.round(quantizationInput[quantizationInputPosition] * Math.max(1, 5 * (i + j + k)));
 								quantizationInputPosition++;
@@ -96,7 +99,7 @@ public class Decoder {
 		// the process is slow.
 		System.out.println("Applying inverse DCT. This process may take some time to complete...");
 		double[] videoPixels = new double[dctCoeffMatrix.length];
-		InverseDCT inverseDCT = new InverseDCT(dctCoeffMatrix, videoPixels, width, height, blockSize, blockSize, blockSize);
+		InverseDCT inverseDCT = new InverseDCT(dctCoeffMatrix, videoPixels, width, height, cubeWidth, cubeHeight, cubeDepth);
 		inverseDCT.run();
 		
 		// Writing decoded data to output file
